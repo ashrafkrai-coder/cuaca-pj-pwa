@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cuaca-pj-v4';
+const CACHE_NAME = 'cuaca-pj-v6';
 const urlsToCache = [
   '/',
   '/index.html',
