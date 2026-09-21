@@ -504,6 +504,65 @@
             height: 130px;
         }
 
+        .trend-fallback {
+            height: 130px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 4px;
+            padding: 4px 2px 0;
+        }
+
+        .trend-fallback[hidden] {
+            display: none;
+        }
+
+        .trend-fallback-item {
+            min-width: 0;
+            flex: 1;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 3px;
+        }
+
+        .trend-fallback-value {
+            font-size: 8px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            white-space: nowrap;
+        }
+
+        .trend-fallback-bar-wrap {
+            height: 72px;
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .trend-fallback-bar {
+            width: 16px;
+            max-width: 100%;
+            min-height: 6px;
+            border-radius: 5px 5px 2px 2px;
+            background: linear-gradient(180deg, #8b5cf6 0%, #6366f1 100%);
+        }
+
+        .trend-fallback-time {
+            font-size: 8px;
+            color: var(--card-text-light);
+            white-space: nowrap;
+        }
+
+        .trend-fallback-message {
+            align-items: center;
+            justify-content: center;
+            color: var(--card-text-light);
+            font-size: 11px;
+            text-align: center;
+        }
+
         .trend-summary {
             font-size: 11px;
             color: var(--primary-dark);
@@ -633,6 +692,7 @@
                 <div class="trend-title">📈 Trend PM2.5 - 24 Jam Akan Datang</div>
                 <div class="trend-chart-wrap">
                     <canvas id="trendChart"></canvas>
+                    <div class="trend-fallback" id="trendFallback" hidden aria-live="polite"></div>
                 </div>
                 <div class="trend-summary" id="trendSummary">Menganalisis ramalan...</div>
             </div>
@@ -1080,9 +1140,40 @@
             return `${h}${period}`;
         }
 
-        function renderTrendChart(hourly) {
-            if (typeof Chart === 'undefined') return;
+        function renderTrendFallback(labels, values) {
+            const canvas = document.getElementById('trendChart');
+            const fallback = document.getElementById('trendFallback');
+            const maxValue = Math.max(...values, 1);
+            const interval = Math.max(1, Math.ceil(labels.length / 8));
+            const sampleIndexes = labels.map((_, index) => index)
+                .filter(index => index % interval === 0 || index === labels.length - 1);
 
+            if (trendChart) {
+                trendChart.destroy();
+                trendChart = null;
+            }
+
+            canvas.hidden = true;
+            fallback.hidden = false;
+            fallback.className = 'trend-fallback';
+            fallback.innerHTML = sampleIndexes.map(index => {
+                const height = Math.max(8, Math.round((values[index] / maxValue) * 100));
+                return `
+                    <div class="trend-fallback-item">
+                        <div class="trend-fallback-value">${values[index].toFixed(0)}</div>
+                        <div class="trend-fallback-bar-wrap"><div class="trend-fallback-bar" style="height:${height}%"></div></div>
+                        <div class="trend-fallback-time">${labels[index]}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function showTrendCanvas() {
+            document.getElementById('trendChart').hidden = false;
+            document.getElementById('trendFallback').hidden = true;
+        }
+
+        function renderTrendChart(hourly) {
             const now = new Date();
             let startIdx = hourly.time.findIndex(t => new Date(t) >= now);
             if (startIdx === -1) startIdx = 0;
@@ -1100,34 +1191,6 @@
 
             const labels = next24Time.map(formatHour12Short);
 
-            const canvas = document.getElementById('trendChart');
-            const ctx = canvas.getContext('2d');
-            if (trendChart) trendChart.destroy();
-            trendChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        data: next24Pm25,
-                        borderColor: '#6366f1',
-                        backgroundColor: 'rgba(99,102,241,0.15)',
-                        fill: true,
-                        tension: 0.35,
-                        pointRadius: 0,
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { ticks: { maxTicksLimit: 5, font: { size: 9 } }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 } } }
-                    }
-                }
-            });
-
             let minIdx = 0, maxIdx = 0;
             next24Pm25.forEach((v, i) => {
                 if (v < next24Pm25[minIdx]) minIdx = i;
@@ -1137,6 +1200,53 @@
             document.getElementById('trendSummary').innerHTML =
                 `Kualiti udara dijangka <b>paling bersih pada ${labels[minIdx]}</b> (${next24Pm25[minIdx].toFixed(1)} µg/m³) ` +
                 `dan <b>paling tercemar pada ${labels[maxIdx]}</b> (${next24Pm25[maxIdx].toFixed(1)} µg/m³).`;
+
+            // Chart.js dimuatkan dari CDN. Jika ia lambat/disekat dalam PWA,
+            // tunjukkan graf bar ringan supaya trend dan bacaan tidak kosong.
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js tidak tersedia; guna paparan trend alternatif.');
+                renderTrendFallback(labels, next24Pm25);
+                return;
+            }
+
+            const canvas = document.getElementById('trendChart');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                renderTrendFallback(labels, next24Pm25);
+                return;
+            }
+
+            try {
+                if (trendChart) trendChart.destroy();
+                showTrendCanvas();
+                trendChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: next24Pm25,
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99,102,241,0.15)',
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { maxTicksLimit: 5, font: { size: 9 } }, grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.warn('Carta trend gagal dilukis; guna paparan trend alternatif.', error);
+                renderTrendFallback(labels, next24Pm25);
+            }
         }
 
         function showTrendError() {
@@ -1144,6 +1254,11 @@
                 trendChart.destroy();
                 trendChart = null;
             }
+            document.getElementById('trendChart').hidden = true;
+            const fallback = document.getElementById('trendFallback');
+            fallback.hidden = false;
+            fallback.className = 'trend-fallback trend-fallback-message';
+            fallback.textContent = 'Tiada bacaan trend PM2.5 disimpan buat masa ini.';
             document.getElementById('trendSummary').textContent = 'Data ramalan tidak tersedia buat masa ini.';
         }
 
