@@ -229,6 +229,18 @@
             margin-bottom: 12px;
         }
 
+        .data-status {
+            margin: -4px 0 12px;
+            padding: 7px 9px;
+            border-radius: 9px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: var(--card-text-light);
+            font-size: 10px;
+            line-height: 1.35;
+            text-align: center;
+        }
+
         .details-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -540,30 +552,31 @@
                 <div class="weather-top">
                     <div class="weather-icon" id="weatherIcon">🌧️</div>
                     <div class="temp-section">
-                        <div class="current-temp" id="currentTemp">--°C</div>
-                        <div class="feels-like" id="feelsLike">Rasakan --°C</div>
+                        <div class="current-temp" id="currentTemp">Memuatkan</div>
+                        <div class="feels-like" id="feelsLike">Sila tunggu</div>
                     </div>
                 </div>
 
                 <div class="weather-condition" id="weatherCondition">Memuatkan...</div>
                 <div class="weather-description" id="weatherDescription">Mendapatkan data cuaca</div>
+                <div class="data-status" id="dataStatus" role="status">Cuaca dan IPU sedang dimuatkan</div>
 
                 <div class="details-grid">
                     <div class="detail-item">
                         <div class="detail-label">Kelembapan</div>
-                        <div class="detail-value" id="humidityValue">--%</div>
+                        <div class="detail-value" id="humidityValue">Memuatkan</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Angin</div>
-                        <div class="detail-value" id="windValue">-- km/h</div>
+                        <div class="detail-value" id="windValue">Memuatkan</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Pandangan</div>
-                        <div class="detail-value" id="visibilityValue">-- km</div>
+                        <div class="detail-value" id="visibilityValue">Memuatkan</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Ipu</div>
-                        <div class="detail-value" id="ipu">--</div>
+                        <div class="detail-value" id="ipu">Memuatkan</div>
                     </div>
                 </div>
             </div>
@@ -575,22 +588,22 @@
                     <div class="forecast-item">
                         <div style="font-size: 9px;">Pagi</div>
                         <div class="forecast-icon" id="forecastIcon-morning">☀️</div>
-                        <div class="forecast-temp" id="forecastTemp-morning">--°C</div>
+                        <div class="forecast-temp" id="forecastTemp-morning">Memuatkan</div>
                     </div>
                     <div class="forecast-item">
                         <div style="font-size: 9px;">Tengahari</div>
                         <div class="forecast-icon" id="forecastIcon-midday">🌤️</div>
-                        <div class="forecast-temp" id="forecastTemp-midday">--°C</div>
+                        <div class="forecast-temp" id="forecastTemp-midday">Memuatkan</div>
                     </div>
                     <div class="forecast-item">
                         <div style="font-size: 9px;">Petang</div>
                         <div class="forecast-icon" id="forecastIcon-evening">⛅</div>
-                        <div class="forecast-temp" id="forecastTemp-evening">--°C</div>
+                        <div class="forecast-temp" id="forecastTemp-evening">Memuatkan</div>
                     </div>
                     <div class="forecast-item">
                         <div style="font-size: 9px;">Malam</div>
                         <div class="forecast-icon" id="forecastIcon-night">🌧️</div>
-                        <div class="forecast-temp" id="forecastTemp-night">--°C</div>
+                        <div class="forecast-temp" id="forecastTemp-night">Memuatkan</div>
                     </div>
                 </div>
             </div>
@@ -625,7 +638,7 @@
             </div>
         </div>
 
-        <footer class="app-footer">Developed by ustazahraf • v1.0</footer>
+        <footer class="app-footer">Developed by ustazahraf • v1.1</footer>
     </div>
 
     <!-- Theme Toggle -->
@@ -739,54 +752,196 @@
             }
         }
 
-        function fetchIQAirData(lat, lon) {
+        // Simpan respons terakhir bagi setiap kawasan. Ini memberi aplikasi satu lagi
+        // lapisan perlindungan jika API atau talian sementara tidak tersedia.
+        const DATA_CACHE_VERSION = 'v1';
+        const dataAvailability = { weather: 'Memuatkan', air: 'Memuatkan' };
+
+        function cacheKey(type, lat, lon) {
+            return `cuaca-pj:${DATA_CACHE_VERSION}:${type}:${Number(lat).toFixed(3)}:${Number(lon).toFixed(3)}`;
+        }
+
+        function saveApiCache(type, lat, lon, data) {
+            try {
+                localStorage.setItem(cacheKey(type, lat, lon), JSON.stringify({
+                    savedAt: new Date().toISOString(),
+                    data: data
+                }));
+            } catch (error) {
+                console.warn('Tidak dapat menyimpan cache data cuaca', error);
+            }
+        }
+
+        function readApiCache(type, lat, lon) {
+            try {
+                const raw = localStorage.getItem(cacheKey(type, lat, lon));
+                return raw ? JSON.parse(raw) : null;
+            } catch (error) {
+                console.warn('Cache data cuaca tidak sah', error);
+                return null;
+            }
+        }
+
+        function isNumber(value) {
+            return typeof value === 'number' && Number.isFinite(value);
+        }
+
+        function isCompleteRecord(record, fields) {
+            return Boolean(record && record.time && fields.every(field => isNumber(record[field])));
+        }
+
+        function apiTimeToMillis(value) {
+            const match = typeof value === 'string' && value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+            if (!match) return NaN;
+            return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+        }
+
+        function getCurrentApiTime(timezone) {
+            try {
+                const parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: timezone || 'Asia/Kuala_Lumpur',
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+                }).formatToParts(new Date()).reduce((result, part) => {
+                    result[part.type] = part.value;
+                    return result;
+                }, {});
+                return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        // Cari rekod lengkap pada jam sebelumnya. Jika jam itu tiada, cari rekod
+        // lengkap yang lebih awal sahaja — tidak sekali-kali mengambil ramalan masa depan.
+        function findPreviousHourlyIndex(hourly, referenceTime, fields) {
+            if (!hourly || !Array.isArray(hourly.time)) return -1;
+
+            const reference = apiTimeToMillis(referenceTime);
+            const target = Number.isFinite(reference) ? reference - (60 * 60 * 1000) : Infinity;
+            let startIndex = hourly.time.length - 1;
+
+            if (Number.isFinite(target)) {
+                startIndex = -1;
+                for (let i = hourly.time.length - 1; i >= 0; i--) {
+                    if (apiTimeToMillis(hourly.time[i]) <= target) {
+                        startIndex = i;
+                        break;
+                    }
+                }
+                if (startIndex === -1) return -1;
+            }
+
+            for (let i = startIndex; i >= 0; i--) {
+                const isComplete = fields.every(field => isNumber(hourly[field] && hourly[field][i]));
+                if (isComplete) return i;
+            }
+            return -1;
+        }
+
+        function buildRecord(data, fields, preferPrevious) {
+            const current = data && data.current;
+            if (!preferPrevious && isCompleteRecord(current, fields)) {
+                return { ...current, source: 'live' };
+            }
+
+            const referenceTime = (current && current.time) || getCurrentApiTime(data && data.timezone);
+            const hourly = data && data.hourly;
+            const index = findPreviousHourlyIndex(hourly, referenceTime, fields);
+            if (index === -1) return null;
+
+            const record = { time: hourly.time[index], source: 'previous' };
+            fields.forEach(field => { record[field] = hourly[field][index]; });
+            return record;
+        }
+
+        function formatRecordedTime(value) {
+            const match = typeof value === 'string' && value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+            if (!match) return 'masa tidak direkodkan';
+            const hour24 = Number(match[4]);
+            const suffix = hour24 >= 12 ? 'PTG' : 'PG';
+            const hour12 = hour24 % 12 || 12;
+            return `${match[3]}/${match[2]}/${match[1]}, ${hour12}:${match[5]} ${suffix}`;
+        }
+
+        function setDataAvailability(type, label) {
+            dataAvailability[type] = label;
+            document.getElementById('dataStatus').textContent = `Cuaca: ${dataAvailability.weather} · IPU: ${dataAvailability.air}`;
+        }
+
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            if (!data || typeof data !== 'object') throw new Error('Respons API tidak sah');
+            return {
+                data: data,
+                fromServiceWorkerCache: response.headers.get('X-Cuaca-Data-Source') === 'cache'
+            };
+        }
+
+        async function fetchIQAirData(lat, lon) {
             // Guna Open-Meteo Air Quality API - percuma, tanpa token, dan data sebenar
             // ikut koordinat sebenar (WAQI token 'demo' sentiasa pulangkan data Shanghai
             // tanpa mengira koordinat yang dihantar - tak sesuai untuk produksi)
             const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}` +
-                `&current=us_aqi,pm2_5,pm10&hourly=pm2_5&timezone=auto&forecast_days=2`;
+                `&current=us_aqi,pm2_5,pm10&hourly=us_aqi,pm2_5,pm10&timezone=auto&forecast_days=2`;
+            const fields = ['us_aqi', 'pm2_5', 'pm10'];
 
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.current && data.current.us_aqi != null) {
-                        updateAQIDisplay(Math.round(data.current.us_aqi));
-                    } else {
-                        showAQIError();
-                    }
+            try {
+                const result = await fetchJson(url);
+                const record = buildRecord(result.data, fields, result.fromServiceWorkerCache);
+                if (!record) throw new Error('Rekod IPU semasa atau jam sebelumnya tidak lengkap');
 
-                    if (data.current && data.current.pm2_5 != null) {
-                        updateMascotAndRecommendations(data.current.pm2_5);
-                        checkHazardNotification(data.current.pm2_5);
-                    } else {
-                        showRecommendError();
-                    }
+                if (!result.fromServiceWorkerCache) saveApiCache('air', lat, lon, result.data);
+                renderAirData(record);
+                if (result.data.hourly && Array.isArray(result.data.hourly.pm2_5)) {
+                    renderTrendChart(result.data.hourly);
+                } else {
+                    showTrendError();
+                }
 
-                    if (data.hourly && data.hourly.pm2_5) {
-                        renderTrendChart(data.hourly);
+                const prefix = record.source === 'previous' ? 'Bacaan jam sebelumnya' : 'Data semasa';
+                setDataAvailability('air', `${prefix} (${formatRecordedTime(record.time)})`);
+            } catch (error) {
+                console.warn('Data IPU semasa tidak tersedia', error);
+                const cached = readApiCache('air', lat, lon);
+                const record = cached && buildRecord(cached.data, fields, true);
+
+                if (record) {
+                    renderAirData(record);
+                    if (cached.data.hourly && Array.isArray(cached.data.hourly.pm2_5)) {
+                        renderTrendChart(cached.data.hourly);
                     } else {
                         showTrendError();
                     }
-                })
-                .catch(error => {
-                    console.log('Data IPU tidak tersedia, guna data default', error);
+                    setDataAvailability('air', `Bacaan tersimpan (${formatRecordedTime(record.time)})`);
+                } else {
                     showAQIError();
                     showRecommendError();
                     showTrendError();
-                });
+                    setDataAvailability('air', 'Tiada rekod tersimpan');
+                }
+            }
+        }
+
+        function renderAirData(record) {
+            updateAQIDisplay(Math.round(record.us_aqi));
+            updateMascotAndRecommendations(record.pm2_5);
+            checkHazardNotification(record.pm2_5);
         }
 
         function showAQIError() {
             const ipu = document.getElementById('ipu');
-            if (ipu) ipu.textContent = 'N/A';
+            if (ipu) ipu.textContent = 'Tiada rekod';
 
             const alerts = document.getElementById('alerts');
             alerts.className = 'alerts';
             alerts.innerHTML = `
                 <div class="alerts-icon">ℹ️</div>
                 <div class="alerts-content">
-                    <div class="alerts-title">Data IPU tidak tersedia</div>
-                    <div class="alerts-text">Sila cuba lagi sebentar.</div>
+                    <div class="alerts-title">Data IPU belum tersedia</div>
+                    <div class="alerts-text">Tiada rekod terdahulu disimpan pada peranti ini.</div>
                 </div>
             `;
         }
@@ -901,14 +1056,14 @@
         }
 
         function showRecommendError() {
-            document.getElementById('pm25Level').textContent = 'Data tidak tersedia';
-            document.getElementById('pm25Subtext').textContent = 'Sila cuba lagi sebentar';
+            document.getElementById('pm25Level').textContent = 'Tiada rekod PM2.5';
+            document.getElementById('pm25Subtext').textContent = 'Data terdahulu belum disimpan pada peranti ini';
             document.getElementById('recommendList').innerHTML = `
                 <div class="recommend-row">
                     <span class="recommend-icon">ℹ️</span>
                     <div class="recommend-text">
-                        <div class="recommend-text-title">Tiada data PM2.5</div>
-                        <div class="recommend-text-note">Sila segar semula lokasi anda</div>
+                        <div class="recommend-text-title">Rekod PM2.5 belum tersedia</div>
+                        <div class="recommend-text-note">Sila sambung ke internet dan segar semula aplikasi</div>
                     </div>
                 </div>
             `;
@@ -932,9 +1087,16 @@
             let startIdx = hourly.time.findIndex(t => new Date(t) >= now);
             if (startIdx === -1) startIdx = 0;
 
-            const next24Time = hourly.time.slice(startIdx, startIdx + 24);
-            const next24Pm25 = hourly.pm2_5.slice(startIdx, startIdx + 24);
-            if (next24Pm25.length === 0) return;
+            const points = hourly.time.slice(startIdx, startIdx + 24)
+                .map((time, index) => ({ time, value: hourly.pm2_5[startIdx + index] }))
+                .filter(point => isNumber(point.value));
+            if (points.length === 0) {
+                showTrendError();
+                return;
+            }
+
+            const next24Time = points.map(point => point.time);
+            const next24Pm25 = points.map(point => point.value);
 
             const labels = next24Time.map(formatHour12Short);
 
@@ -978,6 +1140,10 @@
         }
 
         function showTrendError() {
+            if (trendChart) {
+                trendChart.destroy();
+                trendChart = null;
+            }
             document.getElementById('trendSummary').textContent = 'Data ramalan tidak tersedia buat masa ini.';
         }
 
@@ -1045,40 +1211,68 @@
             return WEATHER_CODE_MAP[code] || { icon: '🌡️', text: 'Tidak Diketahui' };
         }
 
-        function fetchWeatherData(lat, lon) {
+        async function fetchWeatherData(lat, lon) {
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-                `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
-                `&hourly=temperature_2m,weather_code,visibility` +
-                `&timezone=auto&forecast_days=1`;
+                `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,visibility` +
+                `&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,visibility` +
+                `&timezone=auto&forecast_days=2`;
+            const fields = [
+                'temperature_2m', 'apparent_temperature', 'relative_humidity_2m',
+                'weather_code', 'wind_speed_10m', 'visibility'
+            ];
 
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.current) {
-                        renderCurrentWeather(data);
-                        renderForecast(data);
-                    } else {
-                        showWeatherError();
-                    }
-                })
-                .catch(error => {
-                    console.log('Data cuaca tidak tersedia', error);
+            try {
+                const result = await fetchJson(url);
+                const record = buildRecord(result.data, fields, result.fromServiceWorkerCache);
+                if (!record) throw new Error('Rekod cuaca semasa atau jam sebelumnya tidak lengkap');
+
+                if (!result.fromServiceWorkerCache) saveApiCache('weather', lat, lon, result.data);
+                renderCurrentWeather(record);
+                renderForecast(result.data);
+
+                const prefix = record.source === 'previous' ? 'Bacaan jam sebelumnya' : 'Data semasa';
+                setDataAvailability('weather', `${prefix} (${formatRecordedTime(record.time)})`);
+            } catch (error) {
+                console.warn('Data cuaca semasa tidak tersedia', error);
+                const cached = readApiCache('weather', lat, lon);
+                const record = cached && buildRecord(cached.data, fields, true);
+
+                if (record) {
+                    renderCurrentWeather(record);
+                    renderForecast(cached.data);
+                    setDataAvailability('weather', `Bacaan tersimpan (${formatRecordedTime(record.time)})`);
+                } else {
                     showWeatherError();
-                });
+                    setDataAvailability('weather', 'Tiada rekod tersimpan');
+                }
+            }
         }
 
         function showWeatherError() {
-            document.getElementById('weatherCondition').textContent = 'Data tidak tersedia';
-            document.getElementById('weatherDescription').textContent = 'Sila cuba lagi sebentar';
+            document.getElementById('weatherIcon').textContent = '🌥️';
+            document.getElementById('currentTemp').textContent = 'Tiada rekod';
+            document.getElementById('feelsLike').textContent = 'Sambung ke internet';
+            document.getElementById('weatherCondition').textContent = 'Cuaca belum tersedia';
+            document.getElementById('weatherDescription').textContent = 'Tiada data jam sebelumnya yang tersimpan pada peranti ini';
+            document.getElementById('humidityValue').textContent = 'Tiada rekod';
+            document.getElementById('windValue').textContent = 'Tiada rekod';
+            document.getElementById('visibilityValue').textContent = 'Tiada rekod';
+
+            ['morning', 'midday', 'evening', 'night'].forEach(key => {
+                const icon = document.getElementById(`forecastIcon-${key}`);
+                const temp = document.getElementById(`forecastTemp-${key}`);
+                if (icon) icon.textContent = '📍';
+                if (temp) temp.textContent = 'Tiada rekod';
+            });
         }
 
-        function renderCurrentWeather(data) {
-            const current = data.current;
-            const info = getWeatherInfo(current.weather_code);
-            const temp = Math.round(current.temperature_2m);
-            const feelsLike = Math.round(current.apparent_temperature);
-            const humidity = Math.round(current.relative_humidity_2m);
-            const wind = Math.round(current.wind_speed_10m);
+        function renderCurrentWeather(record) {
+            const info = getWeatherInfo(record.weather_code);
+            const temp = Math.round(record.temperature_2m);
+            const feelsLike = Math.round(record.apparent_temperature);
+            const humidity = Math.round(record.relative_humidity_2m);
+            const wind = Math.round(record.wind_speed_10m);
+            const visibility = (record.visibility / 1000).toFixed(1);
 
             document.getElementById('weatherIcon').textContent = info.icon;
             document.getElementById('currentTemp').textContent = `${temp}°C`;
@@ -1086,6 +1280,7 @@
             document.getElementById('weatherCondition').textContent = info.text;
             document.getElementById('humidityValue').textContent = `${humidity}%`;
             document.getElementById('windValue').textContent = `${wind} km/h`;
+            document.getElementById('visibilityValue').textContent = `${visibility} km`;
 
             let description = 'Sederhana';
             if (temp >= 30 && humidity >= 60) {
@@ -1094,22 +1289,19 @@
                 description = 'Sejuk & Selesa';
             }
             document.getElementById('weatherDescription').textContent = description;
-
-            // Pandangan (visibility) - ambil dari data hourly pada jam semasa
-            const nowHour = new Date().getHours();
-            const hourly = data.hourly;
-            if (hourly && hourly.visibility) {
-                const idx = hourly.time.findIndex(t => new Date(t).getHours() === nowHour);
-                if (idx !== -1 && hourly.visibility[idx] != null) {
-                    const visKm = (hourly.visibility[idx] / 1000).toFixed(1);
-                    document.getElementById('visibilityValue').textContent = `${visKm} km`;
-                }
-            }
         }
 
         function renderForecast(data) {
             const hourly = data.hourly;
-            if (!hourly || !hourly.time) return;
+            if (!hourly || !hourly.time) {
+                ['morning', 'midday', 'evening', 'night'].forEach(key => {
+                    const icon = document.getElementById(`forecastIcon-${key}`);
+                    const temp = document.getElementById(`forecastTemp-${key}`);
+                    if (icon) icon.textContent = '📍';
+                    if (temp) temp.textContent = 'Tiada rekod';
+                });
+                return;
+            }
 
             const periods = [
                 { key: 'morning', hour: 8 },
@@ -1120,13 +1312,18 @@
 
             periods.forEach(period => {
                 const idx = hourly.time.findIndex(t => new Date(t).getHours() === period.hour);
-                if (idx === -1) return;
+                const iconEl = document.getElementById(`forecastIcon-${period.key}`);
+                const tempEl = document.getElementById(`forecastTemp-${period.key}`);
+                const hasRecord = idx !== -1 && isNumber(hourly.temperature_2m[idx]) && isNumber(hourly.weather_code[idx]);
+
+                if (!hasRecord) {
+                    if (iconEl) iconEl.textContent = '📍';
+                    if (tempEl) tempEl.textContent = 'Tiada rekod';
+                    return;
+                }
 
                 const temp = Math.round(hourly.temperature_2m[idx]);
                 const info = getWeatherInfo(hourly.weather_code[idx]);
-
-                const iconEl = document.getElementById(`forecastIcon-${period.key}`);
-                const tempEl = document.getElementById(`forecastTemp-${period.key}`);
                 if (iconEl) iconEl.textContent = info.icon;
                 if (tempEl) tempEl.textContent = `${temp}°C`;
             });

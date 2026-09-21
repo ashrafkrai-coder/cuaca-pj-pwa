@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cuaca-pj-v6';
+const CACHE_NAME = 'cuaca-pj-v7';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -56,7 +56,19 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => {
-          return caches.match(event.request);
+          return caches.match(event.request).then(cached => {
+            if (!cached) return cached;
+
+            // Beritahu aplikasi bahawa respons ini datang daripada cache. Aplikasi
+            // kemudiannya memilih bacaan jam sebelumnya dan melabelkannya dengan jelas.
+            const headers = new Headers(cached.headers);
+            headers.set('X-Cuaca-Data-Source', 'cache');
+            return new Response(cached.body, {
+              status: cached.status,
+              statusText: cached.statusText,
+              headers
+            });
+          });
         })
     );
     return;
