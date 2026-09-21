@@ -1,0 +1,23 @@
+{
+  "name": "cuaca-pj-app",
+  "version": "1.0.0",
+  "description": "Aplikasi Cuaca Petaling Jaya - PWA dengan data real-time IQAir",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx http-server . -p 8000 -c-1",
+    "start": "npx http-server . -p 8000 -c-1"
+  },
+  "keywords": [
+    "weather",
+    "pwa",
+    "malaysia",
+    "petaling-jaya",
+    "air-quality"
+  ],
+  "author": "Ashraf",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/cuaca-pj-app"
+  }
+}

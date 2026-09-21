@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Aplikasi Cuaca Petaling Jaya - Weather App">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Cuaca PJ">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/icons/icon-192x192.png">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <title>Cuaca Petaling Jaya</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --bg-light: #f8fafc;
+            --bg-white: #ffffff;
+            --text-dark: #1e293b;
+            --text-light: #64748b;
+            /* Kad putih (weather-card, forecast-card, dll.) kekal terang tanpa mengira tema,
+               jadi teksnya perlu WARNA TETAP - tak boleh guna --text-dark/--text-light yang
+               bertukar dalam dark mode (jika tidak, teks terang di atas kad putih tak boleh dibaca) */
+            --card-text: #1e293b;
+            --card-text-light: #64748b;
+        }
+
+        [data-theme="dark"] {
+            --bg-light: #0f172a;
+            --bg-white: #1e293b;
+            --text-dark: #f1f5f9;
+            --text-light: #cbd5e1;
+        }
+
+        html, body {
+            width: 100%;
+            min-height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+            color: var(--text-dark);
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+        }
+
+        header {
+            padding: 12px 16px 8px;
+            text-align: center;
+            color: white;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: opacity 0.3s ease;
+        }
+
+        header:active {
+            opacity: 0.8;
+        }
+
+        .header-title {
+            font-size: 11px;
+            font-weight: 500;
+            opacity: 0.9;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .header-location {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .header-time {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .location-status {
+            font-size: 10px;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+
+        .main-content {
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .alerts {
+            background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+            border-radius: 16px;
+            padding: 10px 12px;
+            color: white;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            box-shadow: 0 15px 35px rgba(100, 116, 139, 0.3);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .alerts.level-good {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            box-shadow: 0 15px 35px rgba(34, 197, 94, 0.3);
+        }
+
+        .alerts.level-moderate {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 15px 35px rgba(245, 158, 11, 0.3);
+        }
+
+        .alerts.level-unhealthy {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            box-shadow: 0 15px 35px rgba(249, 115, 22, 0.3);
+        }
+
+        .alerts.level-very-unhealthy {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 15px 35px rgba(239, 68, 68, 0.3);
+        }
+
+        .alerts.level-hazardous {
+            background: linear-gradient(135deg, #7c2d92 0%, #581c87 100%);
+            box-shadow: 0 15px 35px rgba(124, 45, 146, 0.3);
+        }
+
+        .alerts-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .alerts-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .alerts-title {
+            font-weight: 700;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+
+        .alerts-text {
+            font-size: 11px;
+            opacity: 0.95;
+            line-height: 1.3;
+        }
+
+        .weather-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border-radius: 20px;
+            padding: 16px 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .weather-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .weather-icon {
+            font-size: 48px;
+        }
+
+        .temp-section {
+            text-align: right;
+        }
+
+        .current-temp {
+            font-size: 42px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+
+        .feels-like {
+            font-size: 11px;
+            color: var(--card-text-light);
+        }
+
+        .weather-condition {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--card-text);
+            margin-bottom: 4px;
+            text-transform: capitalize;
+        }
+
+        .weather-description {
+            font-size: 12px;
+            color: var(--card-text-light);
+            margin-bottom: 12px;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .detail-item {
+            text-align: center;
+            padding: 8px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #f3e8ff 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .detail-label {
+            font-size: 10px;
+            color: var(--card-text-light);
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .detail-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .forecast-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border-radius: 20px;
+            padding: 14px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .forecast-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--card-text);
+        }
+
+        .forecast-items {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .forecast-item {
+            background: linear-gradient(135deg, #f0f4ff 0%, #f3e8ff 100%);
+            border-radius: 12px;
+            padding: 8px 4px;
+            text-align: center;
+            font-size: 10px;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .forecast-icon {
+            font-size: 24px;
+            margin: 4px 0;
+        }
+
+        .forecast-temp {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 11px;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            color: white;
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 999;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .theme-toggle:active {
+            transform: scale(0.9);
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                padding: 20px;
+                max-width: 500px;
+                margin: 0 auto;
+            }
+
+            .weather-card, .forecast-card, .alerts {
+                max-width: 100%;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .loading {
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        .app-footer {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 10px;
+            padding: 4px 0 8px;
+            flex-shrink: 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Banner amaran bahaya (mock notifikasi push) */
+        .hazard-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 10px 12px 0;
+            transition: transform 0.4s ease, opacity 0.4s ease;
+        }
+
+        .hazard-banner.banner-hidden {
+            transform: translateY(-120%);
+            opacity: 0;
+        }
+
+        .hazard-banner-inner {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border-radius: 14px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.4);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .hazard-icon { font-size: 18px; flex-shrink: 0; }
+        .hazard-content { flex: 1; min-width: 0; }
+        .hazard-title { font-weight: 700; font-size: 12px; }
+        .hazard-text { font-size: 11px; opacity: 0.95; }
+        .hazard-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0 2px;
+        }
+
+        /* Kad mascot & syor aktiviti */
+        .recommend-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border-radius: 20px;
+            padding: 14px 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .recommend-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .mascot-avatar {
+            font-size: 30px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.3s ease;
+            background: linear-gradient(135deg, #6ee7b7, #10b981);
+        }
+
+        .mascot-avatar.pm-good { background: linear-gradient(135deg, #6ee7b7, #10b981); }
+        .mascot-avatar.pm-moderate { background: linear-gradient(135deg, #fde68a, #f59e0b); }
+        .mascot-avatar.pm-usg { background: linear-gradient(135deg, #fdba74, #f97316); }
+        .mascot-avatar.pm-unhealthy { background: linear-gradient(135deg, #fca5a5, #ef4444); }
+
+        .recommend-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--card-text);
+        }
+
+        .recommend-subtitle {
+            font-size: 11px;
+            color: var(--card-text-light);
+            margin-top: 1px;
+        }
+
+        .recommend-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #f3e8ff 100%);
+            border-radius: 12px;
+            margin-bottom: 6px;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .recommend-row:last-child { margin-bottom: 0; }
+        .recommend-icon { font-size: 18px; flex-shrink: 0; }
+        .recommend-text { flex: 1; min-width: 0; }
+        .recommend-text-title { font-size: 11px; font-weight: 600; color: var(--card-text); }
+        .recommend-text-note { font-size: 9px; color: var(--card-text-light); margin-top: 1px; }
+        .recommend-status { font-size: 10px; font-weight: 700; white-space: nowrap; color: var(--card-text); }
+
+        /* Kad carta trend */
+        .trend-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border-radius: 20px;
+            padding: 14px 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .trend-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--card-text);
+            margin-bottom: 8px;
+        }
+
+        .trend-chart-wrap {
+            position: relative;
+            height: 130px;
+        }
+
+        .trend-summary {
+            font-size: 11px;
+            color: var(--primary-dark);
+            background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+            border-radius: 10px;
+            padding: 8px 10px;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+
+        /* Kad notifikasi */
+        .notif-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border-radius: 20px;
+            padding: 14px 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .notif-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--card-text);
+            margin-bottom: 10px;
+        }
+
+        .notif-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            border: none;
+            font-weight: 600;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        .notif-btn:active { opacity: 0.85; }
+
+        .notif-status {
+            font-size: 10px;
+            color: var(--card-text-light);
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* Pratonton widget skrin utama */
+        .widget-preview { flex-shrink: 0; }
+
+        .widget-preview-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.75);
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 6px;
+        }
+
+        .widget-card {
+            background: rgba(15, 15, 25, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 220px;
+            margin: 0 auto;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .widget-avatar { font-size: 26px; flex-shrink: 0; }
+        .widget-info { flex: 1; min-width: 0; color: white; }
+        .widget-gps { font-size: 9px; color: rgba(255, 255, 255, 0.6); }
+        .widget-pm25 { font-size: 15px; font-weight: 700; line-height: 1.3; }
+        .widget-pm25 span { font-size: 10px; font-weight: 400; color: rgba(255, 255, 255, 0.6); }
+
+        .widget-badge {
+            display: inline-block;
+            font-size: 9px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #10b981;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Banner amaran bahaya (mock notifikasi push) -->
+    <div class="hazard-banner hidden banner-hidden" id="hazardBanner">
+        <div class="hazard-banner-inner">
+            <span class="hazard-icon">🚨</span>
+            <div class="hazard-content">
+                <div class="hazard-title">Amaran Kualiti Udara</div>
+                <div class="hazard-text" id="hazardText">-</div>
+            </div>
+            <button class="hazard-close" onclick="dismissHazardBanner()">&times;</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <header onclick="getMyLocation()">
+            <div class="header-title">📍 <span id="stateName">Selangor</span></div>
+            <div class="header-location" id="locationName">Petaling Jaya</div>
+            <div class="header-time" id="currentTime">Ahad, 1 Januari 2026 • 12:30 PG</div>
+            <div class="location-status" id="locationStatus">Tap untuk lokasi anda</div>
+        </header>
+
+        <div class="main-content">
+            <!-- Alert -->
+            <div class="alerts" id="alerts">
+                <div class="alerts-icon">⏳</div>
+                <div class="alerts-content">
+                    <div class="alerts-title">Memuatkan data IPU...</div>
+                    <div class="alerts-text">Sila tunggu sebentar</div>
+                </div>
+            </div>
+
+            <!-- Main Weather -->
+            <div class="weather-card">
+                <div class="weather-top">
+                    <div class="weather-icon" id="weatherIcon">🌧️</div>
+                    <div class="temp-section">
+                        <div class="current-temp" id="currentTemp">--°C</div>
+                        <div class="feels-like" id="feelsLike">Rasakan --°C</div>
+                    </div>
+                </div>
+
+                <div class="weather-condition" id="weatherCondition">Memuatkan...</div>
+                <div class="weather-description" id="weatherDescription">Mendapatkan data cuaca</div>
+
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Kelembapan</div>
+                        <div class="detail-value" id="humidityValue">--%</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Angin</div>
+                        <div class="detail-value" id="windValue">-- km/h</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Pandangan</div>
+                        <div class="detail-value" id="visibilityValue">-- km</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Ipu</div>
+                        <div class="detail-value" id="ipu">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Forecast -->
+            <div class="forecast-card">
+                <div class="forecast-title">Ramalan Hari Ini</div>
+                <div class="forecast-items">
+                    <div class="forecast-item">
+                        <div style="font-size: 9px;">Pagi</div>
+                        <div class="forecast-icon" id="forecastIcon-morning">☀️</div>
+                        <div class="forecast-temp" id="forecastTemp-morning">--°C</div>
+                    </div>
+                    <div class="forecast-item">
+                        <div style="font-size: 9px;">Tengahari</div>
+                        <div class="forecast-icon" id="forecastIcon-midday">🌤️</div>
+                        <div class="forecast-temp" id="forecastTemp-midday">--°C</div>
+                    </div>
+                    <div class="forecast-item">
+                        <div style="font-size: 9px;">Petang</div>
+                        <div class="forecast-icon" id="forecastIcon-evening">⛅</div>
+                        <div class="forecast-temp" id="forecastTemp-evening">--°C</div>
+                    </div>
+                    <div class="forecast-item">
+                        <div style="font-size: 9px;">Malam</div>
+                        <div class="forecast-icon" id="forecastIcon-night">🌧️</div>
+                        <div class="forecast-temp" id="forecastTemp-night">--°C</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mascot & Syor Aktiviti -->
+            <div class="recommend-card">
+                <div class="recommend-header">
+                    <div class="mascot-avatar" id="mascotAvatar">😊</div>
+                    <div>
+                        <div class="recommend-title" id="pm25Level">Memuatkan...</div>
+                        <div class="recommend-subtitle" id="pm25Subtext">Menganalisis PM2.5</div>
+                    </div>
+                </div>
+                <div id="recommendList">
+                    <div class="recommend-row">
+                        <span class="recommend-icon">⏳</span>
+                        <div class="recommend-text">
+                            <div class="recommend-text-title">Boleh Saya Keluar?</div>
+                            <div class="recommend-text-note">Mendapatkan syor aktiviti...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trend PM2.5 24 Jam -->
+            <div class="trend-card">
+                <div class="trend-title">📈 Trend PM2.5 - 24 Jam Akan Datang</div>
+                <div class="trend-chart-wrap">
+                    <canvas id="trendChart"></canvas>
+                </div>
+                <div class="trend-summary" id="trendSummary">Menganalisis ramalan...</div>
+            </div>
+
+            <!-- Notifikasi PWA -->
+            <div class="notif-card">
+                <div class="notif-title">🔔 Notifikasi Amaran Udara</div>
+                <button class="notif-btn" onclick="requestAppNotificationPermission()">Benarkan Notifikasi</button>
+                <div class="notif-status" id="notifStatus">Status: belum diminta</div>
+            </div>
+
+            <!-- Pratonton Widget Skrin Utama -->
+            <div class="widget-preview">
+                <div class="widget-preview-label">Pratonton Widget Skrin Utama</div>
+                <div class="widget-card">
+                    <div class="widget-avatar" id="widgetAvatar">😊</div>
+                    <div class="widget-info">
+                        <div class="widget-gps" id="widgetGps">📡 GPS: --</div>
+                        <div class="widget-pm25" id="widgetPm25">-- <span>PM2.5</span></div>
+                        <span class="widget-badge" id="widgetBadge">Baik</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="app-footer">Developed by ustazahraf • v1.0</footer>
+    </div>
+
+    <!-- Theme Toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="Togol Dark Mode">🌙</button>
+
+    <script>
+        let currentLocation = {
+            name: 'Petaling Jaya',
+            state: 'Selangor',
+            lat: 3.1075,
+            lon: 101.5895
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTime();
+            initTheme();
+            setInterval(updateTime, 60000);
+            loadSavedLocation();
+
+            if ('Notification' in window && Notification.permission !== 'default') {
+                document.getElementById('notifStatus').textContent =
+                    `Status: ${Notification.permission === 'granted' ? 'dibenarkan ✅' : 'ditolak ❌'}`;
+            }
+        });
+
+        function getMyLocation() {
+            const status = document.getElementById('locationStatus');
+            status.textContent = '🔍 Mendapatkan lokasi...';
+
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        getReverseGeocode(lat, lon);
+                    },
+                    function(error) {
+                        status.textContent = '❌ Gagal dapatkan lokasi';
+                        console.error(error);
+                        setTimeout(() => {
+                            status.textContent = 'Tap untuk lokasi anda';
+                        }, 3000);
+                    },
+                    { timeout: 10000, enableHighAccuracy: true }
+                );
+            } else {
+                status.textContent = '❌ Geolokasi tidak tersedia';
+            }
+        }
+
+        function getReverseGeocode(lat, lon) {
+            const status = document.getElementById('locationStatus');
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=14&lat=${lat}&lon=${lon}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const address = data.address || {};
+                    // Cuba pelbagai tahap ketepatan (mukim/bandar hingga daerah) supaya
+                    // lokasi luar bandar pun dapat nama tepat, bukan sekadar "Lokasi Anda"
+                    const village = address.village || address.town || address.suburb ||
+                        address.city_district || address.city || address.municipality ||
+                        address.county || address.state_district || address.district ||
+                        (data.display_name ? data.display_name.split(',')[0].trim() : 'Lokasi Anda');
+                    const state = address.state || 'Malaysia';
+
+                    currentLocation = { name: village, state: state, lat: lat, lon: lon };
+
+                    updateLocationDisplay();
+                    saveLocation();
+                    status.textContent = '✅ Lokasi dikemas kini';
+                    setTimeout(() => {
+                        status.textContent = 'Tap untuk tukar lokasi';
+                    }, 2000);
+                })
+                .catch(error => {
+                    console.error(error);
+                    // Alamat gagal diselesaikan, tapi koordinat masih sah - guna koordinat untuk data cuaca
+                    currentLocation = { name: 'Lokasi Anda', state: currentLocation.state, lat: lat, lon: lon };
+                    updateLocationDisplay();
+                    saveLocation();
+                    status.textContent = '⚠️ Alamat tak dapat diselesaikan';
+                    setTimeout(() => {
+                        status.textContent = 'Tap untuk tukar lokasi';
+                    }, 3000);
+                });
+        }
+
+        function updateLocationDisplay() {
+            document.getElementById('locationName').textContent = currentLocation.name;
+            document.getElementById('stateName').textContent = currentLocation.state;
+            fetchIQAirData(currentLocation.lat, currentLocation.lon);
+            fetchWeatherData(currentLocation.lat, currentLocation.lon);
+        }
+
+        function saveLocation() {
+            localStorage.setItem('userLocation', JSON.stringify(currentLocation));
+        }
+
+        function loadSavedLocation() {
+            const saved = localStorage.getItem('userLocation');
+            if (saved) {
+                currentLocation = JSON.parse(saved);
+                updateLocationDisplay();
+            } else {
+                // Tiada lokasi tersimpan - papar lokasi lalai dahulu, kemudian auto-kesan
+                // lokasi sebenar pengguna (berfungsi di seluruh Malaysia, bukan PJ sahaja)
+                updateLocationDisplay();
+                getMyLocation();
+            }
+        }
+
+        function fetchIQAirData(lat, lon) {
+            // Guna Open-Meteo Air Quality API - percuma, tanpa token, dan data sebenar
+            // ikut koordinat sebenar (WAQI token 'demo' sentiasa pulangkan data Shanghai
+            // tanpa mengira koordinat yang dihantar - tak sesuai untuk produksi)
+            const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}` +
+                `&current=us_aqi,pm2_5,pm10&hourly=pm2_5&timezone=auto&forecast_days=2`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current && data.current.us_aqi != null) {
+                        updateAQIDisplay(Math.round(data.current.us_aqi));
+                    } else {
+                        showAQIError();
+                    }
+
+                    if (data.current && data.current.pm2_5 != null) {
+                        updateMascotAndRecommendations(data.current.pm2_5);
+                        checkHazardNotification(data.current.pm2_5);
+                        updateWidgetPreview(lat, lon, data.current.pm2_5);
+                    } else {
+                        showRecommendError();
+                    }
+
+                    if (data.hourly && data.hourly.pm2_5) {
+                        renderTrendChart(data.hourly);
+                    } else {
+                        showTrendError();
+                    }
+                })
+                .catch(error => {
+                    console.log('Data IPU tidak tersedia, guna data default', error);
+                    showAQIError();
+                    showRecommendError();
+                    showTrendError();
+                });
+        }
+
+        function showAQIError() {
+            const ipu = document.getElementById('ipu');
+            if (ipu) ipu.textContent = 'N/A';
+
+            const alerts = document.getElementById('alerts');
+            alerts.className = 'alerts';
+            alerts.innerHTML = `
+                <div class="alerts-icon">ℹ️</div>
+                <div class="alerts-content">
+                    <div class="alerts-title">Data IPU tidak tersedia</div>
+                    <div class="alerts-text">Sila cuba lagi sebentar.</div>
+                </div>
+            `;
+        }
+
+        function updateAQIDisplay(aqi) {
+            const ipu = document.getElementById('ipu');
+            if (ipu) {
+                ipu.textContent = aqi;
+            }
+
+            // Update alert berdasarkan AQI level
+            const alerts = document.getElementById('alerts');
+            let alertLevel = 'Baik';
+            let alertIcon = '✅';
+            let alertMsg = 'Kualiti udara baik!';
+            let levelClass = 'level-good';
+
+            if (aqi > 300) {
+                alertLevel = 'Berbahaya';
+                alertIcon = '🚨';
+                alertMsg = 'Jangan keluar! Berbahaya untuk semua orang.';
+                levelClass = 'level-hazardous';
+            } else if (aqi > 200) {
+                alertLevel = 'Sangat Tidak Sihat';
+                alertIcon = '🚨';
+                alertMsg = 'Kurangi aktiviti outdoor. Perlindungan maksimal diperlukan.';
+                levelClass = 'level-very-unhealthy';
+            } else if (aqi > 100) {
+                alertLevel = 'Tidak Sihat';
+                alertIcon = '⚠️';
+                alertMsg = 'Kurangi aktiviti luar. Gunakan masker jika perlu!';
+                levelClass = 'level-unhealthy';
+            } else if (aqi > 50) {
+                alertLevel = 'Sederhana';
+                alertIcon = '⚠️';
+                alertMsg = 'Orang sensitif sebaiknya kurangi aktiviti outdoor.';
+                levelClass = 'level-moderate';
+            }
+
+            alerts.className = `alerts ${levelClass}`;
+            alerts.innerHTML = `
+                <div class="alerts-icon">${alertIcon}</div>
+                <div class="alerts-content">
+                    <div class="alerts-title">IPU: ${aqi} - ${alertLevel}</div>
+                    <div class="alerts-text">${alertMsg}</div>
+                </div>
+            `;
+        }
+
+        // --- Mascot & Syor Aktiviti (berdasarkan ambang PM2.5 - Baik/Sederhana/USG/Tidak Sihat) ---
+        const PM25_LEVELS = {
+            good:      { max: 12,       label: 'Baik',                            subtext: 'Udara bersih, selamat untuk semua aktiviti',           avatar: '😄', cardClass: 'pm-good',      badgeColor: '#10b981' },
+            moderate:  { max: 35,       label: 'Sederhana',                       subtext: 'Boleh diterima, kumpulan sensitif kekal berhati-hati', avatar: '😐', cardClass: 'pm-moderate',  badgeColor: '#f59e0b' },
+            usg:       { max: 55,       label: 'Tidak Sihat (Kumpulan Sensitif)', subtext: 'Kanak-kanak/warga emas digalakkan pakai pelitup muka', avatar: '😷', cardClass: 'pm-usg',       badgeColor: '#f97316' },
+            unhealthy: { max: Infinity, label: 'Tidak Sihat',                     subtext: 'Elakkan aktiviti luar, guna respirator jika perlu',    avatar: '🤢', cardClass: 'pm-unhealthy', badgeColor: '#ef4444' }
+        };
+
+        function getPM25Level(pm25) {
+            if (pm25 < PM25_LEVELS.good.max) return { key: 'good', ...PM25_LEVELS.good };
+            if (pm25 < PM25_LEVELS.moderate.max) return { key: 'moderate', ...PM25_LEVELS.moderate };
+            if (pm25 < PM25_LEVELS.usg.max) return { key: 'usg', ...PM25_LEVELS.usg };
+            return { key: 'unhealthy', ...PM25_LEVELS.unhealthy };
+        }
+
+        function renderRecommendations(level) {
+            const outdoorOk = level.key === 'good' || level.key === 'moderate';
+            const outdoorCaution = level.key === 'moderate';
+            const ventilateOk = outdoorOk;
+
+            const items = [
+                {
+                    icon: '🏃',
+                    title: 'Joging / Berbasikal / Taman Permainan',
+                    status: outdoorOk ? (outdoorCaution ? '🟡 Berhati-hati' : '🟢 Sesuai') : '🔴 Tidak Digalakkan',
+                    note: outdoorOk
+                        ? (outdoorCaution ? 'Elakkan senaman berat yang berpanjangan' : 'Selamat untuk semua aktiviti luar')
+                        : 'Kurangkan masa di luar, terutama kanak-kanak & warga emas'
+                },
+                {
+                    icon: '🏠',
+                    title: 'Bukaan Tingkap (Pengudaraan)',
+                    status: ventilateOk ? '🟢 Boleh Buka' : '🔴 Tutup Tingkap',
+                    note: ventilateOk
+                        ? 'Udara luar cukup bersih untuk pengudaraan semula jadi'
+                        : 'Tutup tingkap dan hidupkan penapis udara (air purifier)'
+                }
+            ];
+
+            document.getElementById('recommendList').innerHTML = items.map(it => `
+                <div class="recommend-row">
+                    <span class="recommend-icon">${it.icon}</span>
+                    <div class="recommend-text">
+                        <div class="recommend-text-title">${it.title}</div>
+                        <div class="recommend-text-note">${it.note}</div>
+                    </div>
+                    <span class="recommend-status">${it.status}</span>
+                </div>
+            `).join('');
+        }
+
+        function updateMascotAndRecommendations(pm25) {
+            const level = getPM25Level(pm25);
+
+            const avatarEl = document.getElementById('mascotAvatar');
+            avatarEl.textContent = level.avatar;
+            avatarEl.className = `mascot-avatar ${level.cardClass}`;
+
+            document.getElementById('pm25Level').textContent = `${level.label} (PM2.5: ${pm25.toFixed(1)})`;
+            document.getElementById('pm25Subtext').textContent = level.subtext;
+
+            renderRecommendations(level);
+
+            document.getElementById('widgetAvatar').textContent = level.avatar;
+            const badge = document.getElementById('widgetBadge');
+            badge.textContent = level.label.split(' (')[0];
+            badge.style.background = level.badgeColor;
+        }
+
+        function showRecommendError() {
+            document.getElementById('pm25Level').textContent = 'Data tidak tersedia';
+            document.getElementById('pm25Subtext').textContent = 'Sila cuba lagi sebentar';
+            document.getElementById('recommendList').innerHTML = `
+                <div class="recommend-row">
+                    <span class="recommend-icon">ℹ️</span>
+                    <div class="recommend-text">
+                        <div class="recommend-text-title">Tiada data PM2.5</div>
+                        <div class="recommend-text-note">Sila segar semula lokasi anda</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateWidgetPreview(lat, lon, pm25) {
+            document.getElementById('widgetGps').textContent = `📡 GPS: ${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+            document.getElementById('widgetPm25').innerHTML = `${pm25.toFixed(1)} <span>PM2.5</span>`;
+        }
+
+        // --- Carta trend PM2.5 24 jam (Chart.js) ---
+        let trendChart = null;
+
+        function formatHour12Short(dateStr) {
+            const d = new Date(dateStr);
+            let h = d.getHours();
+            const period = h >= 12 ? 'PTG' : 'PG';
+            h = h % 12 || 12;
+            return `${h}${period}`;
+        }
+
+        function renderTrendChart(hourly) {
+            if (typeof Chart === 'undefined') return;
+
+            const now = new Date();
+            let startIdx = hourly.time.findIndex(t => new Date(t) >= now);
+            if (startIdx === -1) startIdx = 0;
+
+            const next24Time = hourly.time.slice(startIdx, startIdx + 24);
+            const next24Pm25 = hourly.pm2_5.slice(startIdx, startIdx + 24);
+            if (next24Pm25.length === 0) return;
+
+            const labels = next24Time.map(formatHour12Short);
+
+            const canvas = document.getElementById('trendChart');
+            const ctx = canvas.getContext('2d');
+            if (trendChart) trendChart.destroy();
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: next24Pm25,
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99,102,241,0.15)',
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 0,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 5, font: { size: 9 } }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+                    }
+                }
+            });
+
+            let minIdx = 0, maxIdx = 0;
+            next24Pm25.forEach((v, i) => {
+                if (v < next24Pm25[minIdx]) minIdx = i;
+                if (v > next24Pm25[maxIdx]) maxIdx = i;
+            });
+
+            document.getElementById('trendSummary').innerHTML =
+                `Kualiti udara dijangka <b>paling bersih pada ${labels[minIdx]}</b> (${next24Pm25[minIdx].toFixed(1)} µg/m³) ` +
+                `dan <b>paling tercemar pada ${labels[maxIdx]}</b> (${next24Pm25[maxIdx].toFixed(1)} µg/m³).`;
+        }
+
+        function showTrendError() {
+            document.getElementById('trendSummary').textContent = 'Data ramalan tidak tersedia buat masa ini.';
+        }
+
+        // --- Notifikasi PWA & amaran bahaya ---
+        async function requestAppNotificationPermission() {
+            const statusEl = document.getElementById('notifStatus');
+            if (!('Notification' in window)) {
+                statusEl.textContent = 'Status: notifikasi tidak disokong pelayar ini';
+                return;
+            }
+            const permission = await Notification.requestPermission();
+            statusEl.textContent = `Status: ${permission === 'granted' ? 'dibenarkan ✅' : 'ditolak ❌'}`;
+        }
+
+        function checkHazardNotification(pm25) {
+            if (pm25 <= 35) {
+                dismissHazardBanner();
+                return;
+            }
+
+            const text = `Amaran: Tahap PM2.5 telah meningkat kepada ${pm25.toFixed(1)} µg/m³ di kawasan anda.`;
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('Amaran Kualiti Udara', { body: text });
+            }
+
+            const banner = document.getElementById('hazardBanner');
+            document.getElementById('hazardText').textContent = text;
+            banner.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                banner.classList.remove('banner-hidden');
+            });
+        }
+
+        function dismissHazardBanner() {
+            const banner = document.getElementById('hazardBanner');
+            banner.classList.add('banner-hidden');
+            setTimeout(() => banner.classList.add('hidden'), 400);
+        }
+
+        // Peta kod cuaca WMO (digunakan oleh Open-Meteo) ke ikon & teks Bahasa Melayu
+        const WEATHER_CODE_MAP = {
+            0: { icon: '☀️', text: 'Cerah' },
+            1: { icon: '🌤️', text: 'Cerah Berawan' },
+            2: { icon: '⛅', text: 'Berawan Sebahagian' },
+            3: { icon: '☁️', text: 'Mendung' },
+            45: { icon: '🌫️', text: 'Berkabus' },
+            48: { icon: '🌫️', text: 'Berkabus Beku' },
+            51: { icon: '🌦️', text: 'Gerimis Ringan' },
+            53: { icon: '🌦️', text: 'Gerimis' },
+            55: { icon: '🌦️', text: 'Gerimis Lebat' },
+            56: { icon: '🌦️', text: 'Gerimis Beku' },
+            57: { icon: '🌦️', text: 'Gerimis Beku Lebat' },
+            61: { icon: '🌧️', text: 'Hujan Ringan' },
+            63: { icon: '🌧️', text: 'Hujan' },
+            65: { icon: '🌧️', text: 'Hujan Lebat' },
+            66: { icon: '🌧️', text: 'Hujan Beku' },
+            67: { icon: '🌧️', text: 'Hujan Beku Lebat' },
+            71: { icon: '🌨️', text: 'Salji Ringan' },
+            73: { icon: '🌨️', text: 'Salji' },
+            75: { icon: '🌨️', text: 'Salji Lebat' },
+            77: { icon: '🌨️', text: 'Butir Salji' },
+            80: { icon: '🌦️', text: 'Hujan Renjis Ringan' },
+            81: { icon: '🌦️', text: 'Hujan Renjis' },
+            82: { icon: '⛈️', text: 'Hujan Renjis Lebat' },
+            85: { icon: '🌨️', text: 'Salji Renjis Ringan' },
+            86: { icon: '🌨️', text: 'Salji Renjis Lebat' },
+            95: { icon: '⛈️', text: 'Ribut Petir' },
+            96: { icon: '⛈️', text: 'Ribut Petir & Hujan Batu' },
+            99: { icon: '⛈️', text: 'Ribut Petir & Hujan Batu Lebat' }
+        };
+
+        function getWeatherInfo(code) {
+            return WEATHER_CODE_MAP[code] || { icon: '🌡️', text: 'Tidak Diketahui' };
+        }
+
+        function fetchWeatherData(lat, lon) {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+                `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
+                `&hourly=temperature_2m,weather_code,visibility` +
+                `&timezone=auto&forecast_days=1`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current) {
+                        renderCurrentWeather(data);
+                        renderForecast(data);
+                    } else {
+                        showWeatherError();
+                    }
+                })
+                .catch(error => {
+                    console.log('Data cuaca tidak tersedia', error);
+                    showWeatherError();
+                });
+        }
+
+        function showWeatherError() {
+            document.getElementById('weatherCondition').textContent = 'Data tidak tersedia';
+            document.getElementById('weatherDescription').textContent = 'Sila cuba lagi sebentar';
+        }
+
+        function renderCurrentWeather(data) {
+            const current = data.current;
+            const info = getWeatherInfo(current.weather_code);
+            const temp = Math.round(current.temperature_2m);
+            const feelsLike = Math.round(current.apparent_temperature);
+            const humidity = Math.round(current.relative_humidity_2m);
+            const wind = Math.round(current.wind_speed_10m);
+
+            document.getElementById('weatherIcon').textContent = info.icon;
+            document.getElementById('currentTemp').textContent = `${temp}°C`;
+            document.getElementById('feelsLike').textContent = `Rasakan ${feelsLike}°C`;
+            document.getElementById('weatherCondition').textContent = info.text;
+            document.getElementById('humidityValue').textContent = `${humidity}%`;
+            document.getElementById('windValue').textContent = `${wind} km/h`;
+
+            let description = 'Sederhana';
+            if (temp >= 30 && humidity >= 60) {
+                description = 'Panas & Lembap';
+            } else if (temp < 25) {
+                description = 'Sejuk & Selesa';
+            }
+            document.getElementById('weatherDescription').textContent = description;
+
+            // Pandangan (visibility) - ambil dari data hourly pada jam semasa
+            const nowHour = new Date().getHours();
+            const hourly = data.hourly;
+            if (hourly && hourly.visibility) {
+                const idx = hourly.time.findIndex(t => new Date(t).getHours() === nowHour);
+                if (idx !== -1 && hourly.visibility[idx] != null) {
+                    const visKm = (hourly.visibility[idx] / 1000).toFixed(1);
+                    document.getElementById('visibilityValue').textContent = `${visKm} km`;
+                }
+            }
+        }
+
+        function renderForecast(data) {
+            const hourly = data.hourly;
+            if (!hourly || !hourly.time) return;
+
+            const periods = [
+                { key: 'morning', hour: 8 },
+                { key: 'midday', hour: 13 },
+                { key: 'evening', hour: 17 },
+                { key: 'night', hour: 21 }
+            ];
+
+            periods.forEach(period => {
+                const idx = hourly.time.findIndex(t => new Date(t).getHours() === period.hour);
+                if (idx === -1) return;
+
+                const temp = Math.round(hourly.temperature_2m[idx]);
+                const info = getWeatherInfo(hourly.weather_code[idx]);
+
+                const iconEl = document.getElementById(`forecastIcon-${period.key}`);
+                const tempEl = document.getElementById(`forecastTemp-${period.key}`);
+                if (iconEl) iconEl.textContent = info.icon;
+                if (tempEl) tempEl.textContent = `${temp}°C`;
+            });
+        }
+
+        function updateTime() {
+            const now = new Date();
+
+            const dateString = now.toLocaleDateString('ms-MY', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+
+            let hours = now.getHours();
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const period = hours >= 12 ? 'PTG' : 'PG';
+            hours = hours % 12;
+            if (hours === 0) hours = 12;
+            const timeString = `${hours}:${minutes} ${period}`;
+
+            document.getElementById('currentTime').textContent = `${dateString} • ${timeString}`;
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            document.querySelector('.theme-toggle').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        }
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.querySelector('.theme-toggle').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        }
+
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(registration => {
+                    console.log('✅ Service Worker registered:', registration);
+                })
+                .catch(error => {
+                    console.log('Service Worker registration failed:', error);
+                });
+        }
+    </script>
+</body>
+</html>
